@@ -136,8 +136,23 @@ void parallel_update(vector<SDL_FPoint>& positions, vector<SDL_FPoint>& velociti
 
 
 void print_usage_and_exit() {
-    fprintf(stderr, "usage: particle-simulator [screen_width screen_height]\n");
+    printf(
+        "usage: particle-simulator [option] [width height]\n\n"
+        "options:\n"
+        "  -h, --help          show this help message and exit\n\n"
+        "arguments:\n"
+        "  width  height       specify the screen width and height. optional.\n\n"
+        "examples:\n"
+        "  particle-simulator -h\n"
+        "  particle-simulator 1920 1080\n\n"
+    );
     exit(1);
+}
+
+
+void arg_error() {
+    fprintf(stderr, "error: bogus arguments\n");
+    print_usage_and_exit();
 }
 
 
@@ -145,14 +160,23 @@ int main(int argc, char** argv)
 {
     srand(1);
 
-    if (argc == 3) {
-        if (string(argv[1]) == "--help" || string(argv[1]) == "-h")
+    if (argc > 1) {
+        auto argv1 = string(argv[1]);
+
+        if (argv1 == "--help" || argv1 == "-h")
             print_usage_and_exit();
+
+        if (argc <= 2) 
+            arg_error();
+
+        auto argv2 = string(argv[2]);
         
-        if ((screen_width = atoi(argv[1])) == 0 || (screen_height = atoi(argv[2])) == 0) {
-            fprintf(stderr, "error: bogus arguments\n");
-            print_usage_and_exit();
-        }
+        if ((screen_width = atoi(argv[1])) == 0)
+            arg_error();
+
+        if ((screen_height = atoi(argv[2])) == 0)
+            arg_error();
+
     }
 
 

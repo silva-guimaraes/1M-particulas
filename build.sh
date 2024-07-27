@@ -2,6 +2,5 @@
 
 set -euxo pipefail
 
-g++ main.cpp -o c -lSDL2
-./c
+g++ main.cpp -o particle-simulator -lSDL2
 
