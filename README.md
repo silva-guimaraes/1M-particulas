@@ -1,4 +1,4 @@
-# 1,000,000 de particulas
+# 1,000,000 de partículas
 
 ```
 ./build.sh
@@ -6,4 +6,6 @@
 ```
 
 Requer [SDL2](https://www.libsdl.org/) como dependência
+
+
 ![screenshot](out.png)
