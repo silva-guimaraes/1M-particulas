@@ -10,9 +10,7 @@
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
 #include <cmath>
-#include <complex>
 #include <cstdlib>
-// #include <functional>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -26,6 +24,7 @@
 using namespace std;
 
 
+const auto pi = 3.14159265359;
 const int workers_count = thread::hardware_concurrency();
 const int particles_count = 1000000 / workers_count;
 const int FPS = 120;
@@ -101,9 +100,10 @@ public:
     }
 
     inline Point2 rotate(float angle) {
+        auto rad = angle * (pi / 180);
         return Point2(
-            x * cos(angle) - y * sin(angle),
-            x * sin(angle) + y * cos(angle)
+            x * cos(rad) - y * sin(rad),
+            x * sin(rad) + y * cos(rad)
         );
     }
 
@@ -120,7 +120,7 @@ void parallel_update(vector<SDL_FPoint>& positions, vector<SDL_FPoint>& velociti
 
         auto vortex_direction = (vortex - pos).unit();
         auto vortex_distance = pos.distance(vortex);
-        auto vortex_rotation = vortex_direction.rotate(100) * (1 / vortex_distance * 10);
+        auto vortex_rotation = vortex_direction.rotate(mouse_down ? 0 : 90) * (1 / vortex_distance * 10);
 
         auto vel = (vortex_direction + vortex_rotation) * (mouse_down ? 3 : 1);
         velocities[i].x += vel.x;
@@ -194,6 +194,8 @@ int main(int argc, char** argv)
 
 
 
+    SDL_SetHint( SDL_HINT_RENDER_SCALE_QUALITY, "1" );
+
     if( SDL_Init( SDL_INIT_VIDEO ) < 0 ) {
         printf( "SDL could not initialize! SDL_Error: %s\n", SDL_GetError() );
         return 1;
@@ -224,6 +226,7 @@ int main(int argc, char** argv)
         screen_width,
         screen_height,
     };
+
 
     auto workers = vector<thread>();
     auto points_pos = vector<vector<SDL_FPoint>>();
