@@ -2,6 +2,7 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_mouse.h>
+#include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_stdinc.h>
 #include <SDL2/SDL_surface.h>
@@ -9,6 +10,7 @@
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
 #include <cmath>
+#include <complex>
 #include <cstdlib>
 // #include <functional>
 #include <math.h>
@@ -16,21 +18,25 @@
 #include <stdio.h>
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include <string>
 #include <vector>
 #include <thread>
 
 
-const int workers_count = 12;
+using namespace std;
+
+
+const int workers_count = thread::hardware_concurrency();
 const int particles_count = 1000000 / workers_count;
-const int SCREEN_WIDTH = 1920;
-const int SCREEN_HEIGHT = 1000;
 const int FPS = 120;
 const int frame_delay = 1000 / FPS;
 const bool wrap = false;
+int screen_width = 1920;
+int screen_height = 1000;
 
 SDL_Renderer* renderer;
 bool mouse_down = false;
-bool pause = true;
+bool pause = false;
 
 
 class Point2 {
@@ -46,8 +52,8 @@ public:
         auto ny = (int) y;
 
         if (wrap) {
-            nx = ((int)x % SCREEN_WIDTH + SCREEN_WIDTH) % SCREEN_WIDTH;
-            ny = ((int)y % SCREEN_HEIGHT + SCREEN_HEIGHT) % SCREEN_HEIGHT;
+            nx = ((int)x % screen_width + screen_width) % screen_width;
+            ny = ((int)y % screen_height + screen_height) % screen_height;
         }
 
 
@@ -107,44 +113,62 @@ float rand_range(float range) {
     return rand() / (float) RAND_MAX * range - (range / 2);
 }
 
-class Dot {
-public:
-    Point2 pos, vel;
-
-    void update() {
-        pos += vel;
-        vel *= .998;
-    }
-
-    void draw() {
-        pos.draw();
-    }
-
-    Dot(Point2 p) : pos{p} { }
-};
-
-
-void parallel_update(std::vector<Dot>& points, Point2 vortex) {
-    auto p = points.data();
+void parallel_update(vector<SDL_FPoint>& positions, vector<SDL_FPoint>& velocities, Point2 vortex) {
 
     for (int i = 0; i < particles_count; i++) {
+        auto pos = Point2(positions[i].x, positions[i].y);
 
-        auto vortex_direction = (vortex - p[i].pos).unit();
-        auto vortex_distance = p[i].pos.distance(vortex);
+        auto vortex_direction = (vortex - pos).unit();
+        auto vortex_distance = pos.distance(vortex);
         auto vortex_rotation = vortex_direction.rotate(100) * (1 / vortex_distance * 10);
 
-        p[i].vel += vortex_direction + vortex_rotation;
+        auto vel = (vortex_direction + vortex_rotation) * (mouse_down ? 3 : 1);
+        velocities[i].x += vel.x;
+        velocities[i].y += vel.y;
 
-        p[i].update();
+        positions[i].x += velocities[i].x;
+        positions[i].y += velocities[i].y;
+
+        velocities[i].x *= .998;
+        velocities[i].y *= .998;
     }
 }
 
 
+void print_usage_and_exit() {
+    fprintf(stderr, "usage: particle-simulator [screen_width screen_height]\n");
+    exit(1);
+}
 
 
-int main()
+int main(int argc, char** argv)
 {
     srand(1);
+
+    if (argc == 3) {
+        if (string(argv[1]) == "--help" || string(argv[1]) == "-h")
+            print_usage_and_exit();
+        
+        if ((screen_width = atoi(argv[1])) == 0 || (screen_height = atoi(argv[2])) == 0) {
+            fprintf(stderr, "error: bogus arguments\n");
+            print_usage_and_exit();
+        }
+    }
+
+
+    printf("target FPS: %d\n", FPS);
+    printf("threads: %d\n", workers_count);
+    if (workers_count == 0)
+        return 1;
+    printf("total particles: %d\n", particles_count * workers_count);
+    printf("\n");
+    printf("\n");
+
+
+
+
+
+
 
     if( SDL_Init( SDL_INIT_VIDEO ) < 0 ) {
         printf( "SDL could not initialize! SDL_Error: %s\n", SDL_GetError() );
@@ -154,8 +178,8 @@ int main()
     SDL_Window* window = SDL_CreateWindow( "SDL Tutorial",
                                SDL_WINDOWPOS_UNDEFINED,
                                SDL_WINDOWPOS_UNDEFINED,
-                               SCREEN_WIDTH,
-                               SCREEN_HEIGHT,
+                               screen_width,
+                               screen_height,
                                SDL_WINDOW_SHOWN
                                );
 
@@ -173,32 +197,32 @@ int main()
     SDL_Rect fill_rect = {
         0,
         0,
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
+        screen_width,
+        screen_height,
     };
 
-    auto workers = std::vector<std::thread>();
-    auto workers_points = std::vector<std::vector<Dot>>();
+    auto workers = vector<thread>();
+    auto points_pos = vector<vector<SDL_FPoint>>();
+    auto points_vel = vector<vector<SDL_FPoint>>();
 
     for (int i = 0; i < workers_count; i++) {
 
-        auto points = std::vector<Dot>();
+        auto pos = vector<SDL_FPoint>();
+        auto vel = vector<SDL_FPoint>();
 
         for (int i = 0; i < particles_count; i++) {
-            auto random_pos = Point2(rand() % SCREEN_WIDTH, rand() % SCREEN_HEIGHT);
-            auto random_direction = Point2(rand_range(1), rand_range(1));
 
-            auto dot = Dot(random_pos);
-            dot.vel = random_direction;
+            pos.push_back({ (float) (rand() % screen_width), (float) (rand() % screen_height), });
 
-            points.push_back(dot);
+            vel.push_back({ 0, 0 });
         }
 
-
-        workers_points.push_back(points);
+        points_pos.push_back(pos);
+        points_vel.push_back(vel);
     }
 
-    Point2 vortex = Point2((float) SCREEN_WIDTH / 2, (float) SCREEN_HEIGHT / 2);
+
+    Point2 vortex = Point2((float) screen_width / 2, (float) screen_height / 2);
     bool quit = false;
 
     while (!quit) {
@@ -244,18 +268,20 @@ int main()
             if (pause)
                 continue;
 
-            std::thread t(parallel_update, std::ref(workers_points[i]), vortex);
+            thread t(parallel_update, ref(points_pos[i]), ref(points_vel[i]), vortex);
             workers.push_back(std::move(t));
         }
-        for (auto worker = workers.begin(); worker != workers.end(); ++worker) {
-            worker->join();
+
+        for (auto& worker : workers) {
+            if (worker.joinable())
+                worker.join();
         }
 
         workers.clear();
-        for (int i = 0; i < workers_count; i++)
-            for (int j = 0; j < particles_count; j++)
-                workers_points.at(i).at(j).draw();
 
+        SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
+        for (int i = 0; i < workers_count; i++)
+             SDL_RenderDrawPointsF(renderer, points_pos[i].data(), particles_count);
 
         SDL_RenderPresent(renderer);
 
